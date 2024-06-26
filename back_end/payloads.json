@@ -1,0 +1,58 @@
+[
+  {
+    "headers": {
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZXZhcnNoaSIsImV4cCI6MTcwODI5MzE1MiwiaWF0IjoxNzA4MjA2NzUyLCJqdGkiOiI5ODY0Mzg5MzE2In0.EIWUCTT47DfPBJvZxzhg669vKdujirkXPhg9IOrOBNk"
+    },
+    "body": {
+      "collection": "user",
+      "user_name": "devarshi",
+      "email_id": "devarshigoswami97@gmail.com",
+      "password": "hawards5000",
+      "password_hash": "$pbkdf2-sha256$29000$HAOgNMYY4zwH4FxLae09hw$tyjnZqY3euQ3Z82c9OWZLi.f51xdz4eqh0nvtGYPJ/w"
+    }
+  },
+  {
+    "headers": {
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZXZhcnNoaSIsImV4cCI6MTcwODI5MzE1MiwiaWF0IjoxNzA4MjA2NzUyLCJqdGkiOiI5ODY0Mzg5MzE2In0.EIWUCTT47DfPBJvZxzhg669vKdujirkXPhg9IOrOBNk"
+    },
+    "body": {
+      "collection": "invest",
+      "user_name": "devarshi",
+      "amount": "5000",
+      "interest_accrual": "",
+      "auto_payment_flag": "",
+      "expected_returns": "",
+      "investment_plan": "",
+      "communities": [],
+      "password_hash": "$pbkdf2-sha256$29000$HAOgNMYY4zwH4FxLae09hw$tyjnZqY3euQ3Z82c9OWZLi.f51xdz4eqh0nvtGYPJ/w"
+    }
+  },
+  {
+    "headers": {
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZXZhcnNoaSIsImV4cCI6MTcwODI5MzE1MiwiaWF0IjoxNzA4MjA2NzUyLCJqdGkiOiI5ODY0Mzg5MzE2In0.EIWUCTT47DfPBJvZxzhg669vKdujirkXPhg9IOrOBNk"
+    },
+    "body": {
+      "collection": "lend",
+      "user_name": "devarshi",
+      "loan_category": "",
+      "repayment_schedule": "",
+      "document_url": "",
+      "interest_rate": "",
+      "password_hash": "$pbkdf2-sha256$29000$HAOgNMYY4zwH4FxLae09hw$tyjnZqY3euQ3Z82c9OWZLi.f51xdz4eqh0nvtGYPJ/w"
+    }
+  },
+  {
+    "headers": {
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZXZhcnNoaSIsImV4cCI6MTcwODI5MzE1MiwiaWF0IjoxNzA4MjA2NzUyLCJqdGkiOiI5ODY0Mzg5MzE2In0.EIWUCTT47DfPBJvZxzhg669vKdujirkXPhg9IOrOBNk"
+    },
+    "body": {
+      "collection": "community",
+      "community_id": "",
+      "total_pool": "",
+      "geo_tag": "",
+      "users": [],
+      "password_hash": "$pbkdf2-sha256$29000$HAOgNMYY4zwH4FxLae09hw$tyjnZqY3euQ3Z82c9OWZLi.f51xdz4eqh0nvtGYPJ/w"
+    }
+  }
+
+]

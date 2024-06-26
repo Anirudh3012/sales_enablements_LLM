@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  lavinmq:
+    image: cloudamqp/lavinmq
+    hostname: lavinmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - /tmp/amqp:/var/lib/lavinmq
+
+  slack-consumer:
+    build:
+      context: ./slackgpt-consumer
+      dockerfile: Dockerfile
+    environment:
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      CLOUDAMQP_URL: ${CLOUDAMQP_URL}
+      PORT: 4000
+    ports:
+      - "4000:4000"
+    depends_on:
+      - lavinmq
+
+  slack-producer:
+    build:
+      context: ./slackgpt-producer
+      dockerfile: Dockerfile
+    environment:
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET}
+      CLOUDAMQP_URL: ${CLOUDAMQP_URL}
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - lavinmq

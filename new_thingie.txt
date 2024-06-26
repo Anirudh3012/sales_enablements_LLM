@@ -1,0 +1,17 @@
+Factory:
+
+
+
+Query Processor
+
+
+if prod CHEF:
+Query Process (CHEF):
+
+
+
+
+Kubernetes:
+
+
+

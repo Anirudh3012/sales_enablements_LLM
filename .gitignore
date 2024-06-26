@@ -1,0 +1,29 @@
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ignore virtual environment directories
+env/
+venv/
+ENV/
+.venv/
+.ENV/
+
+# Ignore environment variable files
+.env
+
+# Ignore specific project files
+doc_embeddings.pkl
+db_optimized3/
+db_temp5/
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Ignore JetBrains IDE files
+.idea/
+
+# Ignore VSCode settings
+.vscode/
