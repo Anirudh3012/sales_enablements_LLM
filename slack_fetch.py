@@ -8,7 +8,7 @@ from langchain_community.embeddings import OpenAIEmbeddings  # Correct import
 from sentence_transformers import SentenceTransformer
 sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
 
-SLACK_BOT_TOKEN = os.getenv("OPENAI_API_KEY")
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 
 CHANNEL_IDS = ["C06HD8ADMC5"]  # Replace with actual channel IDs
 client = WebClient(token=SLACK_BOT_TOKEN)

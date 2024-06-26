@@ -21,7 +21,6 @@ from keybert import KeyBERT
 from textblob import TextBlob
 from langdetect import detect
 import textstat
-from qa_chain import calculate_similarity
 from bertopic import BERTopic
 from rake_nltk import Rake
 from back_end.Utils.mongo_utils import MongoUtils
@@ -126,8 +125,6 @@ class CustomTextLoader:
         file.seek(0)
         return file.read().decode("utf-8")
 
-
-
 def preprocess_text(text):
     """
     Preprocess and structure text.
@@ -176,7 +173,6 @@ def load_and_process_document(file_path, loader):
             # Preprocess and structure the text
             structured_text = preprocess_text(document_instance.page_content)
             # Save the parsed text to a file
-            # save_parsed_text(file_path, document_instance.page_content)
             # Convert structured text back to Document objects
             documents = [Document(page_content=slide.get('content', ''), metadata={"source": os.path.basename(file_path), "slide_number": slide.get('slide_number', '')}) for slide in structured_text]
             chunks = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100).split_documents(documents)
@@ -313,6 +309,13 @@ def retrieve_embeddings():
     embeddings = [data["metadata"]["embedding"] for data in embeddings_data]
     return documents, embeddings
 
+def calculate_similarity(embedding1, embedding2, adjustment_factor=2):
+    """
+    Calculate similarity between two embeddings.
+    """
+    similarity = cosine_similarity([embedding1], [embedding2])[0][0]
+    adjusted_similarity = similarity ** adjustment_factor
+    return adjusted_similarity
 
 def process_documents(main_document_path, file_paths, save_path):
     start_time = time.time()
@@ -394,13 +397,11 @@ def fetch_messages(channel_id):
         print(f"Error fetching messages from channel {channel_id}: {e.response['error']}")
     return messages
 
-
 def fetch_messages_from_slack():
     all_messages = []
     for channel_id in CHANNEL_IDS:
         all_messages.extend(fetch_messages(channel_id))
     return all_messages
-
 
 def group_messages_into_threads(messages, time_threshold=timedelta(minutes=5)):
     """
@@ -412,8 +413,8 @@ def group_messages_into_threads(messages, time_threshold=timedelta(minutes=5)):
 
     for message in messages:
         if previous_message and (
-                message["user_id"] == previous_message["user_id"]
-                and message["timestamp"] - previous_message["timestamp"] <= time_threshold
+            message["user_id"] == previous_message["user_id"]
+            and message["timestamp"] - previous_message["timestamp"] <= time_threshold
         ):
             current_thread.append(message)
         else:
@@ -424,9 +425,8 @@ def group_messages_into_threads(messages, time_threshold=timedelta(minutes=5)):
 
     if current_thread:
         threads.append(current_thread)
-
+    
     return threads
-
 
 def flatten_metadata(metadata):
     """
@@ -436,15 +436,12 @@ def flatten_metadata(metadata):
     for key, value in metadata.items():
         if isinstance(value, dict):
             for sub_key, sub_value in value.items():
-                flattened_metadata[f"{key}_{sub_key}"] = ', '.join(map(str, sub_value)) if isinstance(sub_value,
-                                                                                                      list) else str(
-                    sub_value)
+                flattened_metadata[f"{key}_{sub_key}"] = ', '.join(map(str, sub_value)) if isinstance(sub_value, list) else str(sub_value)
         elif isinstance(value, list):
             flattened_metadata[key] = ', '.join(map(str, value))
         else:
             flattened_metadata[key] = str(value)
     return flattened_metadata
-
 
 def process_threads_and_enhance_metadata(threads):
     """
@@ -469,7 +466,6 @@ def process_threads_and_enhance_metadata(threads):
 
     return enhanced_documents
 
-
 def fetch_and_process_slack_messages():
     """
     Fetch Slack messages, group them into threads, and enhance metadata.
@@ -477,12 +473,11 @@ def fetch_and_process_slack_messages():
     messages = fetch_messages_from_slack()
     threads = group_messages_into_threads(messages)
     enhanced_documents = process_threads_and_enhance_metadata(threads)
-
-    slack_embeddings = embed_documents_in_batches(enhanced_documents, sentence_model, batch_size=10,
-                                                  use_sentence_transformer=True)
+    
+    slack_embeddings = embed_documents_in_batches(enhanced_documents, sentence_model, batch_size=10, use_sentence_transformer=True)
     slack_re_embeddings = embed_documents_in_batches(
-        [Document(page_content=str(embedding)) for embedding in slack_embeddings],
-        OpenAIEmbeddings(model="text-embedding-ada-002"),
+        [Document(page_content=str(embedding)) for embedding in slack_embeddings], 
+        OpenAIEmbeddings(model="text-embedding-ada-002"), 
         batch_size=10
     )
 

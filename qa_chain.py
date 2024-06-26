@@ -20,7 +20,7 @@ from nltk.corpus import stopwords
 import nltk
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
-from document_processing import retrieve_embeddings
+from document_processing import retrieve_embeddings, calculate_similarity
 from sentence_transformers import SentenceTransformer
 
 sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -28,6 +28,7 @@ sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
 
 from openai import OpenAI
 import openai
+os.environ["OPENAI_API_KEY"] = "sk-proj-RtDTB0Gu43mSTegX8soqT3BlbkFJelbbFftCPBNORR9dfpyp"
 # Ensure the OpenAI API key is set
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
@@ -35,14 +36,6 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 nlp = spacy.load("en_core_web_sm")
-
-def calculate_similarity(embedding1, embedding2, adjustment_factor=2):
-    """
-    Calculate similarity between two embeddings.
-    """
-    similarity = cosine_similarity([embedding1], [embedding2])[0][0]
-    adjusted_similarity = similarity ** adjustment_factor
-    return adjusted_similarity
 
 def extract_key_terms(query):
     """
@@ -170,15 +163,29 @@ def get_llm_responses(queries, conversation_history):
     seen_documents = set()
 
     for query in queries:
+        step_start_time = time.time()
         topic_shifted = detect_new_topic(conversation_history, query)
-        print(f"Topic shifted: {topic_shifted}")  # Print if topic has shifted
+        print(f"Topic shifted: {topic_shifted}, Time taken: {time.time() - step_start_time:.2f} seconds")
+
         if topic_shifted:
             conversation_history = []  # Reset conversation history if a new topic is detected
 
+        step_start_time = time.time()
         documents, embeddings = retrieve_embeddings()
+        print(f"Document embeddings retrieved in {time.time() - step_start_time:.2f} seconds")
+
+        step_start_time = time.time()
         query_embedding = openai_embedding_model.embed_documents([query])[0]
+        print(f"Query embedding created in {time.time() - step_start_time:.2f} seconds")
+
+        step_start_time = time.time()
         doc_similarities = [(Document(page_content=doc.page_content, metadata=doc.metadata), calculate_similarity(query_embedding, emb)) for doc, emb in zip(documents, embeddings)]
+        print(f"Document similarities calculated in {time.time() - step_start_time:.2f} seconds")
+
+        step_start_time = time.time()
         adjusted_similarities = adjust_similarity_scores(query, doc_similarities)
+        print(f"Similarity scores adjusted in {time.time() - step_start_time:.2f} seconds")
+
         top_n = 10
         adjusted_similarities = sorted(adjusted_similarities, key=lambda x: x[1], reverse=True)
 
@@ -195,8 +202,8 @@ def get_llm_responses(queries, conversation_history):
 
         # Combine the top adjusted documents into a single context for the LLM
         context = "\n\n".join([doc.page_content for doc in adjusted_docs])
-        
-        # Generate response using OpenAI with the new syntax
+
+        step_start_time = time.time()
         completion = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -208,22 +215,31 @@ def get_llm_responses(queries, conversation_history):
             stop=None,
             temperature=0.2
         )
-        
+        print(f"OpenAI completion created in {time.time() - step_start_time:.2f} seconds")
+
         # Access the generated text from the response
         response_text = completion.choices[0].message.content.strip()
-        
+
         relevant_metadata = [doc.metadata for doc in adjusted_docs]
 
-        # Calculate relevance and hallucination detection
+        step_start_time = time.time()
         query_relevance_scores = calculate_query_relevance(query_embedding, [doc.metadata["embedding"] for doc in adjusted_docs])
+        print(f"Query relevance scores calculated in {time.time() - step_start_time:.2f} seconds")
+
+        step_start_time = time.time()
         chunk_relevance_scores = calculate_chunk_relevance(query, adjusted_docs)
+        print(f"Chunk relevance scores calculated in {time.time() - step_start_time:.2f} seconds")
+
+        step_start_time = time.time()
         hallucination_detected, checks = detect_hallucination(response_text, adjusted_docs)
-        
-        # Calculate confidence score
+        print(f"Hallucination detection completed in {time.time() - step_start_time:.2f} seconds")
+
+        step_start_time = time.time()
         confidence_score = (sum(query_relevance_scores) + sum(chunk_relevance_scores)) * 100 / (len(query_relevance_scores) + len(chunk_relevance_scores))
         if hallucination_detected:
             confidence_score *= 0.5  # Penalize for hallucination
         confidence_level = get_confidence_level(confidence_score)
+        print(f"Confidence score calculated in {time.time() - step_start_time:.2f} seconds")
 
         responses.append({
             "result": response_text,
