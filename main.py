@@ -5,9 +5,10 @@ from tkinter import filedialog
 from dotenv import load_dotenv
 from web_scraping import scrape_website_content
 from reviews_api import get_reviews
-from document_processing import process_documents, CustomTextLoader, Document, embed_documents_in_batches
+from document_processing import process_documents
 from qa_chain import get_llm_responses
 from langchain_community.embeddings import OpenAIEmbeddings  # Correct import
+from qa_chain import update_conversation_history
 
 load_dotenv()
 
@@ -18,20 +19,20 @@ def main():
     root = tk.Tk()
     root.withdraw()
 
-    company_url = input("Enter the company's website URL: ")
-    company_product_name = input("Enter the company's product name: ")
-    competitor_url = input("Enter the competitor's website URL: ")
-    competitor_product_name = input("Enter the competitor's product name: ")
-
-    print("Scraping company website...")
-    company_web_text = scrape_website_content(company_url)
-    # print("Fetching company reviews...")
-    # company_reviews = get_reviews(company_product_name, RAPIDAPI_KEY)
-
-    print("Scraping competitor website...")
-    competitor_web_text = scrape_website_content(competitor_url)
-    # print("Fetching competitor reviews...")
-    # competitor_reviews = get_reviews(competitor_product_name, RAPIDAPI_KEY)
+    # company_url = input("Enter the company's website URL: ")
+    # company_product_name = input("Enter the company's product name: ")
+    # competitor_url = input("Enter the competitor's website URL: ")
+    # competitor_product_name = input("Enter the competitor's product name: ")
+    #
+    # print("Scraping company website...")
+    # # company_web_text = scrape_website_content(company_url)
+    # # print("Fetching company reviews...")
+    # # company_reviews = get_reviews(company_product_name, RAPIDAPI_KEY)
+    #
+    # print("Scraping competitor website...")
+    # # competitor_web_text = scrape_website_content(competitor_url)
+    # # print("Fetching competitor reviews...")
+    # # competitor_reviews = get_reviews(competitor_product_name, RAPIDAPI_KEY)
     
     main_document_path = filedialog.askopenfilename(title="Select Main Document", filetypes=[("All files", "*.*")])
     if not main_document_path:

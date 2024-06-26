@@ -1,3 +1,15 @@
+import datetime
+from datetime import timedelta
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
+import os
+from document_processing import enhance_metadata_with_bertopic_and_advanced_ner, Document, embed_documents_in_batches
+from langchain_community.embeddings import OpenAIEmbeddings  # Correct import
+from sentence_transformers import SentenceTransformer
+sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
+
+SLACK_BOT_TOKEN = os.getenv("OPENAI_API_KEY")
+
 CHANNEL_IDS = ["C06HD8ADMC5"]  # Replace with actual channel IDs
 client = WebClient(token=SLACK_BOT_TOKEN)
 

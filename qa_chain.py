@@ -20,7 +20,14 @@ from nltk.corpus import stopwords
 import nltk
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
+from document_processing import retrieve_embeddings
+from sentence_transformers import SentenceTransformer
 
+sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
+
+
+from openai import OpenAI
+import openai
 # Ensure the OpenAI API key is set
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
