@@ -29,6 +29,9 @@ nlp = spacy.load("en_core_web_sm")
 kw_model = KeyBERT()
 
 class CustomTextLoader:
+    """
+    Custom loader for various document types.
+    """
     def __init__(self):
         self.handlers = {
             '.docx': self.text_from_docx,
@@ -39,6 +42,9 @@ class CustomTextLoader:
         }
 
     def load(self, file):
+        """
+        Load text from a file based on its extension.
+        """
         ext = os.path.splitext(file.name)[-1].lower()
         if ext in self.handlers:
             text = self.handlers[ext](file)
@@ -48,6 +54,9 @@ class CustomTextLoader:
             raise ValueError(f"Unsupported file type {ext}")
 
     def text_from_pdf(self, file):
+        """
+        Extract text from a PDF file.
+        """
         file.seek(0)
         doc = fitz.open(stream=file.read(), filetype="pdf")
         text = ''
@@ -57,12 +66,18 @@ class CustomTextLoader:
         return text
 
     def text_from_docx(self, file):
+        """
+        Extract text from a DOCX file.
+        """
         import docx
         file.seek(0)
         doc = docx.Document(file)
         return '\n'.join(para.text for para in doc.paragraphs)
 
     def text_from_pptx(self, file):
+        """
+        Extract text from a PPTX file.
+        """
         import pptx
         file.seek(0)
         ppt = pptx.Presentation(BytesIO(file.read()))
@@ -71,107 +86,215 @@ class CustomTextLoader:
         )
 
     def text_from_rtf(self, file):
+        """
+        Extract text from an RTF file.
+        """
         file.seek(0)
         return rtf_to_text(file.read().decode("utf-8"))
 
     def text_from_txt(self, file):
+        """
+        Extract text from a TXT file.
+        """
         file.seek(0)
         return file.read().decode("utf-8")
 
+def preprocess_text(text):
+    """
+    Preprocess and structure text.
+    """
+    # Removing excessive newlines and whitespace
+    text = text.replace("\n\n", "\n").strip()
+    # Split into lines
+    lines = text.split("\n")
+    
+    structured_data = []
+    slide = {}
+    content = []
+    for line in lines:
+        if line.endswith('/12'):
+            # New slide detected
+            if slide:
+                slide['content'] = "\n".join(content).strip()
+                structured_data.append(slide)
+                content = []
+            slide = {"slide_number": line, "title": ""}
+        elif any(keyword in line.lower() for keyword in ["march", "avik bhandari", "switch to plum", "join our", "comprehensive", "easy claims"]):
+            # Title or important section detected
+            if content:
+                slide['content'] = "\n".join(content).strip()
+                structured_data.append(slide)
+                content = []
+            slide = {"slide_number": "", "title": line}
+        else:
+            content.append(line)
+    
+    # Append the last slide
+    if slide:
+        slide['content'] = "\n".join(content).strip()
+        structured_data.append(slide)
+    
+    return structured_data
+
+
 def load_and_process_document(file_path, loader):
+    """
+    Load and split a document into chunks.
+    """
     try:
         with open(file_path, 'rb') as file:
             document_instance = loader.load(file)
-            chunks = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200).split_documents([document_instance])
+            # Preprocess and structure the text
+            structured_text = preprocess_text(document_instance.page_content)
+            # Save the parsed text to a file
+            save_parsed_text(file_path, document_instance.page_content)
+            # Convert structured text back to Document objects
+            documents = [Document(page_content=slide.get('content', ''), metadata={"source": os.path.basename(file_path), "slide_number": slide.get('slide_number', '')}) for slide in structured_text]
+            chunks = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100).split_documents(documents)
+            print(f"Document {file_path} loaded and split into {len(chunks)} chunks.")
             return chunks
     except Exception as e:
         print(f"Error processing {file_path}: {str(e)}")
         return []
 
-def embed_documents_in_batches(documents, embedding_model, batch_size=10):
+def embed_documents_in_batches(documents, embedding_model, batch_size=10, use_sentence_transformer=False):
+    """
+    Embed documents in batches for efficiency.
+    """
+    print("Embedding documents in batches...")
     batches = [documents[i:i + batch_size] for i in range(0, len(documents), batch_size)]
     embeddings = []
     with ThreadPoolExecutor() as executor:
-        futures = [executor.submit(embedding_model.embed_documents, [doc.page_content for doc in batch]) for batch in batches]
+        if use_sentence_transformer:
+            futures = [executor.submit(embedding_model.encode, [doc.page_content for doc in batch], convert_to_tensor=True) for batch in batches]
+        else:
+            futures = [executor.submit(embedding_model.embed_documents, [doc.page_content for doc in batch]) for batch in batches]
         for future in as_completed(futures):
-            embeddings.extend(future.result())
+            embeddings.extend(future.result().cpu().numpy() if use_sentence_transformer else future.result())
+    print(f"Completed embedding {len(documents)} documents.")
     return embeddings
 
-def perform_lda_topic_modeling(texts):
-    count_vectorizer = CountVectorizer(stop_words='english')
-    count_data = count_vectorizer.fit_transform(texts)
-    lda = LatentDirichletAllocation(n_components=10, random_state=0)
-    lda.fit(count_data)
-    return lda, count_vectorizer
+def perform_bertopic_modeling(texts):
+    """
+    Perform topic modeling using BERTopic.
+    """
+    print("Performing BERTopic modeling...")
+    if len(texts) > 1:
+        topics, _ = topic_model.fit_transform(texts)
+    else:
+        topics = [0]  # Assign a default topic for single document cases
+    print("BERTopic modeling completed.")
+    return topics
 
-def enhance_metadata_with_topic_modeling(doc, lda_model, count_vectorizer):
+def advanced_ner(content):
+    """
+    Perform advanced named entity recognition (NER).
+    """
+    ner_results = ner_pipeline(content)
+    entities = {result['entity']: [] for result in ner_results}
+    for result in ner_results:
+        entities[result['entity']].append(result['word'])
+    return entities
+
+def enhance_metadata_with_bertopic_and_advanced_ner(doc):
+    """
+    Enhance document metadata with BERTopic and advanced NER.
+    """
     content = doc.page_content
-    count_data = count_vectorizer.transform([content])
-    topics = lda_model.transform(count_data)[0]
-    top_topic = topics.argmax()
+    topics = perform_bertopic_modeling([content])
+    entities = advanced_ner(content)
     
-    doc_nlp = nlp(content)
-    entities = [ent.text for ent in doc_nlp.ents]
-    
+    # Keyword Extraction
     keywords = kw_model.extract_keywords(content, keyphrase_ngram_range=(1, 2), stop_words='english', top_n=10)
-    
+    rake.extract_keywords_from_text(content)
+    rake_keywords = rake.get_ranked_phrases_with_scores()[:10]
+
+    # Sentiment Analysis
     text_blob = TextBlob(content)
     sentiment = text_blob.sentiment.polarity
-    language = detect(content)
+    
+    # Advanced Sentiment Analysis (using VADER)
+    from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+    vader_analyzer = SentimentIntensityAnalyzer()
+    vader_sentiment = vader_analyzer.polarity_scores(content)['compound']
+    
+    # Handle language detection with fallback
+    try:
+        language = detect(content)
+    except LangDetectException as e:
+        try:
+            from fasttext import load_model
+            lang_model = load_model('lid.176.bin')
+            language = lang_model.predict(content)[0][0]
+        except:
+            language = "unknown"
+    
+    # Readability Metrics
     flesch = textstat.flesch_kincaid_grade(content)
+    smog = textstat.smog_index(content)
+    readability_scores = {
+        "flesch_kincaid_grade": flesch,
+        "smog_index": smog,
+        "flesch_reading_ease": textstat.flesch_reading_ease(content),
+    }
+    
+    # Document Length
     length = len(content.split())
-
+    
+    # Update metadata
     doc.metadata.update({
-        "entities": ', '.join(entities),
+        "entities": {key: ', '.join(map(str, val)) for key, val in entities.items()},
         "keywords": ', '.join([kw[0] for kw in keywords]),
-        "topic_id": int(top_topic),
-        "topic_prob": float(topics[top_topic]),
-        "topics": ', '.join([f"Topic {i}: {prob:.4f}" for i, prob in enumerate(topics)]),
+        "rake_keywords": ', '.join([kw[1] for kw in rake_keywords]),
+        "topics": topics,
         "sentiment": sentiment,
+        "vader_sentiment": vader_sentiment,
         "language": language,
-        "readability_flesch_kincaid": flesch,
-        "document_length": length
+        "readability_scores": {k: str(v) for k, v in readability_scores.items()},
+        "document_length": str(length),
     })
 
+    # Flatten metadata
+    doc.metadata = flatten_metadata(doc.metadata)
+
+    print(f"Metadata enhanced for document with source {doc.metadata['source']}")
     return doc
+
+# Initialize MongoDB
+mongo_utils = MongoUtils()
+db = mongo_utils.connect_to_database()
+embeddings_collection = db.embeddings
+
+# Store Embeddings in MongoDB
+def store_embeddings(documents, embeddings):
+    for doc, emb in zip(documents, embeddings):
+        # Ensure embedding is a list
+        embedding_list = emb.tolist() if not isinstance(emb, list) else emb
+        doc.metadata['embedding'] = embedding_list  # Store embedding in metadata
+        embeddings_collection.insert_one({
+            "content": doc.page_content,
+            "metadata": doc.metadata,
+        })
+
+        
+# Retrieve Embeddings from MongoDB
+def retrieve_embeddings():
+    embeddings_data = list(embeddings_collection.find({}))
+    documents = [Document(page_content=data["content"], metadata=data["metadata"]) for data in embeddings_data]
+    embeddings = [data["metadata"]["embedding"] for data in embeddings_data]
+    return documents, embeddings
+
 
 def process_documents(main_document_path, file_paths, save_path):
     start_time = time.time()
     all_chunks = []
     loader = CustomTextLoader()
-
-    if os.path.exists(save_path):
-        with open(save_path, 'rb') as f:
-            doc_similarities, main_doc_embedding, saved_chunks = pickle.load(f)
-        print("Loaded precomputed embeddings from file.")
-        
-        embedding = OpenAIEmbeddings()
-        # push embeddings to cromadb
-        vectordb = Chroma.from_documents(
-            documents=saved_chunks,
-            embedding=embedding,
-            persist_directory="db_optimized3"
-        )
-        
-        retriever = vectordb.as_retriever(
-            search_type="similarity",
-            search_kwargs={"k": 5},
-        )
-
-        qa_chain = RetrievalQA.from_chain_type(
-            llm=OpenAI(max_tokens=512),
-            chain_type="stuff",
-            retriever=retriever,
-            return_source_documents=True,
-        )
-
-        print(f"Process documents completed in {time.time() - start_time} seconds")
-        return qa_chain, doc_similarities, main_doc_embedding, saved_chunks
+    openai_embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
 
     main_load_start = time.time()
     with open(main_document_path, 'rb') as main_file:
         main_doc_instance = loader.load(main_file)
-        main_doc_embedding = OpenAIEmbeddings().embed_documents([main_doc_instance.page_content])[0]
+        main_doc_embedding = openai_embedding_model.embed_documents([main_doc_instance.page_content])[0]
     print(f"Main document loaded and embedded in {time.time() - main_load_start} seconds")
 
     process_docs_start = time.time()
@@ -187,55 +310,32 @@ def process_documents(main_document_path, file_paths, save_path):
 
     print(f"Other documents processed in {time.time() - process_docs_start} seconds")
 
+    # Fetch and process Slack messages
+    print("Fetching and processing Slack messages...")
+    slack_documents, slack_re_embeddings = fetch_and_process_slack_messages()
+    all_chunks.extend(slack_documents)
+    print(f"Slack messages processed in {time.time() - process_docs_start} seconds")
+
     if all_chunks:
-        lda_start = time.time()
-        stop_words = set(stopwords.words('english'))
-        texts = [' '.join([word for word in doc.page_content.lower().split() if word not in stop_words]) for doc in all_chunks]
-
-        lda_model, count_vectorizer = perform_lda_topic_modeling(texts)
-
-        all_chunks = [enhance_metadata_with_topic_modeling(chunk, lda_model, count_vectorizer) for chunk in all_chunks]
-        print(f"LDA topic modeling completed in {time.time() - lda_start} seconds")
+        all_chunks = [enhance_metadata_with_bertopic_and_advanced_ner(chunk) for chunk in all_chunks if "slack_thread" not in chunk.metadata["source"]]
 
         similarity_start = time.time()
-        chunk_embeddings = embed_documents_in_batches(all_chunks, OpenAIEmbeddings(), batch_size=10)
+        chunk_embeddings = embed_documents_in_batches(all_chunks, openai_embedding_model, batch_size=10)
         similarity_scores = [calculate_similarity(main_doc_embedding, chunk_embedding) for chunk_embedding in chunk_embeddings]
-        doc_similarities = list(zip(all_chunks, similarity_scores))
+        
+        slack_similarity_scores = [calculate_similarity(main_doc_embedding, embedding) for embedding in slack_re_embeddings]
+        
+        all_similarities = similarity_scores + slack_similarity_scores
+        all_documents = all_chunks + slack_documents
+        doc_similarities = list(zip(all_documents, all_similarities))
+        doc_similarities = sorted(doc_similarities, key=lambda x: x[1], reverse=True)
         print(f"Similarity calculations completed in {time.time() - similarity_start} seconds")
 
-        save_start = time.time()
-        with open(save_path, 'wb') as f:
-            pickle.dump((doc_similarities, main_doc_embedding, all_chunks), f)
-        print(f"Precomputed data saved in {time.time() - save_start} seconds")
+        store_embeddings(all_documents, chunk_embeddings + slack_re_embeddings)
+        print(f"Embeddings stored in MongoDB")
 
-        vectordb_start = time.time()
-        embedding = OpenAIEmbeddings()
-        vectordb = Chroma.from_documents(
-            documents=all_chunks,
-            embedding=embedding,
-            persist_directory="db_optimized3"
-        )
-
-        retriever = vectordb.as_retriever(
-            search_type="similarity",
-            search_kwargs={"k": 5},
-        )
-
-        qa_chain = RetrievalQA.from_chain_type(
-            llm=OpenAI(max_tokens=512),
-            chain_type="stuff",
-            retriever=retriever,
-            return_source_documents=True,
-        )
-
-        print(f"Vector store and QA chain creation completed in {time.time() - vectordb_start} seconds")
         print(f"Process documents completed in {time.time() - start_time} seconds")
-        return qa_chain, doc_similarities, main_doc_embedding, all_chunks
+        return None, doc_similarities, main_doc_embedding, all_chunks
 
     print(f"Process documents completed in {time.time() - start_time} seconds")
     return None, None, None, all_chunks
-
-def calculate_similarity(embedding1, embedding2):
-    similarity = cosine_similarity([embedding1], [embedding2])[0][0]
-    harsher_similarity = similarity ** 2
-    return harsher_similarity

@@ -32,8 +32,8 @@ def main():
     competitor_web_text = scrape_website_content(competitor_url)
     # print("Fetching competitor reviews...")
     # competitor_reviews = get_reviews(competitor_product_name, RAPIDAPI_KEY)
-
-    main_document_path = filedialog.askopenfilename(title="Select Main Document", filetypes=[("PDF files", "*.pdf")])
+    
+    main_document_path = filedialog.askopenfilename(title="Select Main Document", filetypes=[("All files", "*.*")])
     if not main_document_path:
         print("No main document selected.")
         return
@@ -43,48 +43,39 @@ def main():
         print("No other documents selected.")
         return
 
-    loader = CustomTextLoader()
-    company_web_doc = Document(page_content=company_web_text, metadata={"source": "company_web"})
-    # company_reviews_doc = Document(page_content='\n\n'.join([f"Title: {r['title']}\nReviewer: {r['reviewer']}\nPositive: {r['positive']}\nNegative: {r['negative']}\nOverall: {r['overall']}" for r in company_reviews]), metadata={"source": "company_reviews"})
-    competitor_web_doc = Document(page_content=competitor_web_text, metadata={"source": "competitor_web"})
-    # competitor_reviews_doc = Document(page_content='\n\n'.join([f"Title: {r['title']}\nReviewer: {r['reviewer']}\nPositive: {r['positive']}\nNegative: {r['negative']}\nOverall: {r['overall']}" for r in competitor_reviews]), metadata={"source": "competitor_reviews"})
-
-    file_paths.extend([company_web_doc,
-                       # company_reviews_doc,
-                       competitor_web_doc,
-                       # competitor_reviews_doc
-                       ])
-
     save_path = "doc_embeddings.pkl"
     start_time = time.time()
     qa_chain, doc_similarities, main_doc_embedding, all_chunks = process_documents(main_document_path, file_paths, save_path)
     print(f"Documents processed in {time.time() - start_time:.2f} seconds")
 
-    if qa_chain:
-        embedding = OpenAIEmbeddings()
-        
-        start_time = time.time()
-        doc_embeddings = embed_documents_in_batches([doc for doc, _ in doc_similarities], embedding, batch_size=10)
-        print(f"Embeddings collected in {time.time() - start_time:.2f} seconds")
+    conversation_history = []
+    while True:
+        user_query = input("Enter your query (or type 'exit' to quit): ")
+        if user_query.lower() == 'exit':
+            break
 
-        query1 = ("What jobs are open at plum?")
-        queries = [query1]
+        conversation_history = update_conversation_history(conversation_history, user_query)
+        queries = [user_query]
 
         start_time = time.time()
-        responses = get_llm_responses(queries, doc_similarities)
+        responses = get_llm_responses(queries, conversation_history)
         print(f"LLM responses retrieved in {time.time() - start_time:.2f} seconds")
 
         for i, response in enumerate(responses):
             card_text = response["result"]
+            relevant_contents = response["content"]
+            confidence_score = response["confidence_score"]
+            confidence_level = response["confidence_level"]
+
             print(f"Response {i+1}:")
             print(card_text)
+            print(f"Confidence Score: {confidence_score:.2f} ({confidence_level})")
+            print("Relevant Content:")
+            for content in relevant_contents:
+                print(content)
+                print("="*50)
 
-            sources = response["source_documents"]
-            print("\nSources:")
-            for source in sources:
-                print(f"Source: {source.metadata['source']}")
-
-            print("\n" + "="*50 + "\n")
+            conversation_history = update_conversation_history(conversation_history, card_text)
 
 if __name__ == "__main__":
     main()
