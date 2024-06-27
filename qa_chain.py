@@ -154,9 +154,6 @@ def get_confidence_level(confidence_score):
 
 
 def get_llm_responses(queries, conversation_history):
-    """
-    Retrieve responses from the LLM based on adjusted similarity scores.
-    """
     responses = []
     openai_embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
 
@@ -204,7 +201,8 @@ def get_llm_responses(queries, conversation_history):
         context = "\n\n".join([doc.page_content for doc in adjusted_docs])
 
         step_start_time = time.time()
-        completion = openai_client.chat.completions.create(
+        response_text = ""
+        for chunk in openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": "You are a seasoned sales representative and the questions being asked are questions by junior reps who have questions about your own company and competitors. The answers need to be detailed with specificity and not give any generic answers and should be answers that junior reps can directly tell potential prospects during a discovery call."},
@@ -213,12 +211,13 @@ def get_llm_responses(queries, conversation_history):
             max_tokens=1024,
             n=1,
             stop=None,
-            temperature=0.2
-        )
-        print(f"OpenAI completion created in {time.time() - step_start_time:.2f} seconds")
-
-        # Access the generated text from the response
-        response_text = completion.choices[0].message.content.strip()
+            temperature=0.1,
+            stream=True
+        ):
+            chunk_content = chunk.choices[0].delta.content if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content else ""
+            print(chunk_content, end="", flush=True)
+            response_text += chunk_content
+        print(f"\nOpenAI completion created in {time.time() - step_start_time:.2f} seconds")
 
         relevant_metadata = [doc.metadata for doc in adjusted_docs]
 
