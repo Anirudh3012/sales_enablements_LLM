@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from broker import cloudamqp
-from chatgpt_helper import chagptify_text
+# from chatgpt_helper import chagptify_text
 from chatgpt_helper_new import get_llm_response
 
 # Load environment variables from .env file
@@ -41,7 +41,7 @@ def callback(ch, method, properties, body):
     thread_ts = body.get("thread_ts")
     
     # Generate ChatGPT response to user prompt
-    chatgpt_response = chagptify_text(message=chatgpt_prompt)
+    chatgpt_response = get_llm_response(message=chatgpt_prompt)
     print('response to the item in queue',chatgpt_response)
 
     # Send code recommendation to Slack
