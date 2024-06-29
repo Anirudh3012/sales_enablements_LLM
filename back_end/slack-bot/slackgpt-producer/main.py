@@ -39,6 +39,7 @@ def handle_app_mention(event) -> None:
             "thread_ts": thread_ts
         }
     )
+    print('message published to MQ')
     
     
 @app.event("message")
