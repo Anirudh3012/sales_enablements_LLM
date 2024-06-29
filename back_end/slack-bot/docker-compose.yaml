@@ -1,14 +1,14 @@
 version: '3.8'
 
 services:
-  lavinmq:
-    image: cloudamqp/lavinmq
-    hostname: lavinmq
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    volumes:
-      - /tmp/amqp:/var/lib/lavinmq
+#  lavinmq:
+#    image: cloudamqp/lavinmq
+#    hostname: lavinmq
+#    ports:
+#      - "5672:5672"
+#      - "15672:15672"
+#    volumes:
+#      - /tmp/amqp:/var/lib/lavinmq
 
   slack-consumer:
     build:
@@ -22,8 +22,8 @@ services:
       PORT: 4000
     ports:
       - "4000:4000"
-    depends_on:
-      - lavinmq
+#    depends_on:
+#      - lavinmq
 
   slack-producer:
     build:
@@ -36,5 +36,5 @@ services:
       PORT: 3000
     ports:
       - "3000:3000"
-    depends_on:
-      - lavinmq
+#    depends_on:
+#      - lavinmq
