@@ -15,17 +15,17 @@ client = WebClient(token=SLACK_BOT_TOKEN)
 
 import asyncio
 
-def fetch_messages(channel_id):
+async def fetch_messages(channel_id):
     messages = []
     try:
-        result = client.conversations_history(channel=channel_id)
+        result = await client.conversations_history(channel=channel_id)
         for message in result['messages']:
             user_id = message.get('user', 'unknown')
             text = message.get('text', '')
             timestamp = datetime.fromtimestamp(float(message.get('ts', 0)))
-            channel_info = client.conversations_info(channel=channel_id)
+            channel_info = await client.conversations_info(channel=channel_id)
             channel_name = channel_info['channel']['name']
-            user_info = client.users_info(user=user_id)
+            user_info = await client.users_info(user=user_id)
             user_name = user_info['user']['name']
             messages.append({
                 "channel_id": channel_id,
@@ -39,10 +39,12 @@ def fetch_messages(channel_id):
         print(f"Error fetching messages from channel {channel_id}: {e.response['error']}")
     return messages
 
-def fetch_messages_from_slack():
+async def fetch_messages_from_slack():
     all_messages = []
-    for channel_id in CHANNEL_IDS:
-        all_messages.extend(fetch_messages(channel_id))
+    tasks = [fetch_messages(channel_id) for channel_id in CHANNEL_IDS]
+    results = await asyncio.gather(*tasks)
+    for result in results:
+        all_messages.extend(result)
     return all_messages
 
 def group_messages_into_threads(messages, time_threshold=timedelta(minutes=5)):
@@ -85,7 +87,7 @@ def flatten_metadata(metadata):
             flattened_metadata[key] = str(value)
     return flattened_metadata
 
-def process_threads_and_enhance_metadata(threads):
+async def process_threads_and_enhance_metadata(threads):
     """
     Process each thread to combine messages and enhance metadata.
     """
@@ -103,21 +105,21 @@ def process_threads_and_enhance_metadata(threads):
         }
 
         doc = Document(page_content=combined_content, metadata=combined_metadata)
-        enhanced_doc = enhance_metadata_with_bertopic_and_advanced_ner(doc)
+        enhanced_doc = await enhance_metadata_with_bertopic_and_advanced_ner(doc)
         enhanced_documents.append(enhanced_doc)
 
     return enhanced_documents
 
-def fetch_and_process_slack_messages():
+async def fetch_and_process_slack_messages():
     """
     Fetch Slack messages, group them into threads, and enhance metadata.
     """
-    messages = fetch_messages_from_slack()
+    messages = await fetch_messages_from_slack()
     threads = group_messages_into_threads(messages)
-    enhanced_documents = process_threads_and_enhance_metadata(threads)
+    enhanced_documents = await process_threads_and_enhance_metadata(threads)
     
-    slack_embeddings = embed_documents_in_batches(enhanced_documents, sentence_model, batch_size=10, use_sentence_transformer=True)
-    slack_re_embeddings = embed_documents_in_batches(
+    slack_embeddings = await embed_documents_in_batches(enhanced_documents, sentence_model, batch_size=10, use_sentence_transformer=True)
+    slack_re_embeddings = await embed_documents_in_batches(
         [Document(page_content=str(embedding)) for embedding in slack_embeddings], 
         OpenAIEmbeddings(model="text-embedding-ada-002"), 
         batch_size=10
