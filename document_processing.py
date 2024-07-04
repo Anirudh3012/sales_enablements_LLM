@@ -275,9 +275,6 @@ async def enhance_metadata_with_bertopic_and_advanced_ner(doc):
     # Document Length
     length = len(content.split())
 
-    # Update metadata
-    doc.metadata.update({
-    # Preserve original metadata
     original_metadata = {
         "source": doc.metadata.get("source", ""),
         "company name": doc.metadata.get("company name", ""),
@@ -340,6 +337,13 @@ async def retrieve_embeddings():
     embeddings = [data["metadata"]["embedding"] for data in embeddings_data]
     return documents, embeddings
 
+def calculate_similarity(embedding1, embedding2, adjustment_factor=2):
+    """
+    Calculate similarity between two embeddings.
+    """
+    similarity = cosine_similarity([embedding1], [embedding2])[0][0]
+    adjusted_similarity = similarity ** adjustment_factor
+    return adjusted_similarity
 async def process_documents(main_document_path, file_paths, save_path):
     start_time = time.time()
     all_chunks = []
