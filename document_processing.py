@@ -1,5 +1,8 @@
+import asyncio
 import os
 import pickle
+
+import aiofiles
 import fitz  # PyMuPDF
 from io import BytesIO
 from striprtf.striprtf import rtf_to_text
@@ -176,7 +179,7 @@ async def load_and_process_document(file_path, loader):
             else:
                 document_instance = loader.load(file)
                 structured_data = preprocess_text(document_instance.page_content)
-                await save_parsed_text(file_path, document_instance.page_content)
+                # await save_parsed_text(file_path, document_instance.page_content)
                 documents = [Document(page_content=slide.get('content', ''), metadata={"source": os.path.basename(file_path), "slide_number": slide.get('slide_number', '')}) for slide in structured_data]
 
             chunks = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100).split_documents(documents)
@@ -249,7 +252,6 @@ async def enhance_metadata_with_bertopic_and_advanced_ner(doc):
     # Handle language detection with fallback
     try:
         language = detect(content)
-<<<<<<< Updated upstream
     except LangDetectException as e:
         try:
             from fasttext import load_model
@@ -258,11 +260,9 @@ async def enhance_metadata_with_bertopic_and_advanced_ner(doc):
         except:
             language = "unknown"
 
-=======
     except LangDetectException:
         language = "unknown"
     
->>>>>>> Stashed changes
     # Readability Metrics
     flesch = textstat.flesch_kincaid_grade(content)
     smog = textstat.smog_index(content)
@@ -275,10 +275,8 @@ async def enhance_metadata_with_bertopic_and_advanced_ner(doc):
     # Document Length
     length = len(content.split())
 
-<<<<<<< Updated upstream
     # Update metadata
     doc.metadata.update({
-=======
     # Preserve original metadata
     original_metadata = {
         "source": doc.metadata.get("source", ""),
@@ -292,7 +290,6 @@ async def enhance_metadata_with_bertopic_and_advanced_ner(doc):
     # Update metadata with new information, ensuring original metadata is preserved
     enhanced_metadata = {
         **doc.metadata,
->>>>>>> Stashed changes
         "entities": {key: ', '.join(map(str, val)) for key, val in entities.items()},
         "keywords": ', '.join([kw[0] for kw in keywords]),
         "rake_keywords": ', '.join([kw[1] for kw in rake_keywords]),
@@ -333,15 +330,12 @@ async def store_embeddings(documents, embeddings):
             "metadata": doc.metadata,
         })
 
-<<<<<<< Updated upstream
 
 # Retrieve Embeddings from MongoDB
 def retrieve_embeddings():
     embeddings_data = list(embeddings_collection.find({}))
-=======
 async def retrieve_embeddings():
     embeddings_data = list(await embeddings_collection.find({}).to_list(length=None))
->>>>>>> Stashed changes
     documents = [Document(page_content=data["content"], metadata=data["metadata"]) for data in embeddings_data]
     embeddings = [data["metadata"]["embedding"] for data in embeddings_data]
     return documents, embeddings

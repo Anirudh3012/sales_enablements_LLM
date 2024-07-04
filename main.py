@@ -1,3 +1,4 @@
+import asyncio
 import os
 import time  # Ensure this import is included
 import tkinter as tk
@@ -33,12 +34,7 @@ async def main():
     # # competitor_web_text = scrape_website_content(competitor_url)
     # # print("Fetching competitor reviews...")
     # # competitor_reviews = get_reviews(competitor_product_name, RAPIDAPI_KEY)
-<<<<<<< Updated upstream
-
-
-=======
     
->>>>>>> Stashed changes
     main_document_path = filedialog.askopenfilename(title="Select Main Document", filetypes=[("All files", "*.*")])
     if not main_document_path:
         print("No main document selected.")
