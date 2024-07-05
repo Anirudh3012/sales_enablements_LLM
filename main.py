@@ -15,7 +15,7 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
 
-def main():
+async def main():
     root = tk.Tk()
     root.withdraw()
 
@@ -34,7 +34,6 @@ def main():
     # # print("Fetching competitor reviews...")
     # # competitor_reviews = get_reviews(competitor_product_name, RAPIDAPI_KEY)
 
-
     main_document_path = filedialog.askopenfilename(title="Select Main Document", filetypes=[("All files", "*.*")])
     if not main_document_path:
         print("No main document selected.")
@@ -47,7 +46,7 @@ def main():
 
     save_path = "doc_embeddings.pkl"
     start_time = time.time()
-    qa_chain, doc_similarities, main_doc_embedding, all_chunks = process_documents(main_document_path, file_paths, save_path)
+    qa_chain, doc_similarities, main_doc_embedding, all_chunks = await process_documents(main_document_path, file_paths, save_path)
     print(f"Documents processed in {time.time() - start_time:.2f} seconds")
 
     conversation_history = []
@@ -60,7 +59,7 @@ def main():
         queries = [user_query]
 
         start_time = time.time()
-        responses = get_llm_responses(queries, conversation_history)
+        responses = await get_llm_responses(queries, conversation_history)
         print(f"LLM responses retrieved in {time.time() - start_time:.2f} seconds")
 
         for i, response in enumerate(responses):
@@ -69,15 +68,15 @@ def main():
             confidence_score = response["confidence_score"]
             confidence_level = response["confidence_level"]
 
-            # print(f"Response {i+1}:")
-            # print(card_text)
+            print(f"Response {i+1}:")
+            print(card_text)
             print(f"Confidence Score: {confidence_score:.2f} ({confidence_level})")
-            # print("Relevant Content:")
-            # for content in relevant_contents:
-            #     print(content)
-            #     print("="*50)
+            print("Relevant Content:")
+            for content in relevant_contents:
+                print(content)
+                print("="*50)
 
             conversation_history = update_conversation_history(conversation_history, card_text)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

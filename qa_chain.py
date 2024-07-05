@@ -156,7 +156,7 @@ def get_confidence_level(confidence_score):
         return "Low"
 
 
-def get_llm_responses(queries, conversation_history):
+async def get_llm_responses(queries, conversation_history):
     responses = []
     openai_embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
 
@@ -171,7 +171,7 @@ def get_llm_responses(queries, conversation_history):
             conversation_history = []  # Reset conversation history if a new topic is detected
 
         step_start_time = time.time()
-        documents, embeddings = retrieve_embeddings()
+        documents, embeddings = await retrieve_embeddings()
         print(f"Document embeddings retrieved in {time.time() - step_start_time:.2f} seconds")
 
         step_start_time = time.time()
