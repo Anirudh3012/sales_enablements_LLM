@@ -26,14 +26,15 @@ from rake_nltk import Rake
 from back_end.Utils.mongo_utils import MongoUtils
 from transformers import pipeline
 import time  # Ensure this is imported
-
+import asyncio
 import datetime
 from datetime import timedelta
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-import os
+import aiofiles
 from langchain_community.embeddings import OpenAIEmbeddings  # Correct import
 from sentence_transformers import SentenceTransformer
+
 sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
 
 SLACK_BOT_TOKEN = os.getenv("OPENAI_API_KEY")
@@ -65,65 +66,199 @@ class CustomTextLoader:
             '.pdf': self.text_from_pdf,
             '.rtf': self.text_from_rtf,
             '.txt': self.text_from_txt,
+            '.csv': self.text_from_csv  # Added CSV handler
         }
 
-    def load(self, file):
+    async def load(self, file, file_type=None, file_name=None):
         """
         Load text from a file based on its extension.
         """
-        ext = os.path.splitext(file.name)[-1].lower()
+        if file_type:
+            ext = file_type
+        elif file_name:
+            ext = os.path.splitext(file_name)[-1].lower()
+        else:
+            ext = os.path.splitext(file.name if hasattr(file, 'name') else '')[-1].lower()
+        
+        print(f"Loading file with extension: {ext}")
+        print(f"Handlers available: {list(self.handlers.keys())}")
+
         if ext in self.handlers:
-            text = self.handlers[ext](file)
-            title = os.path.splitext(os.path.basename(file.name))[0]
-            return Document(page_content=text, metadata={"source": title})
+            try:
+                result = await self.handlers[ext](file, file_name)
+                if ext == '.csv':
+                    combined_text, initial_metadata, documents = result
+                    return Document(page_content=combined_text, metadata=initial_metadata), documents
+                else:
+                    text, metadata = result
+                    return Document(page_content=text, metadata=metadata)
+            except Exception as e:
+                print(f"Error processing {file_name or 'file'}: {e}")
+                raise e
         else:
             raise ValueError(f"Unsupported file type {ext}")
-
-    def text_from_pdf(self, file):
+    
+    async def text_from_pdf(self, file, file_name=None):
         """
         Extract text from a PDF file.
         """
+        print("Processing PDF file...")
         file.seek(0)
         doc = fitz.open(stream=file.read(), filetype="pdf")
         text = ''
         for page in doc:
             text += page.get_text("text")
         doc.close()
-        return text
+        title = os.path.splitext(os.path.basename(file_name if file_name else ''))[0]
+        return text, {"source": title}
 
-    def text_from_docx(self, file):
+    async def text_from_docx(self, file, file_name=None):
         """
         Extract text from a DOCX file.
         """
+        print("Processing DOCX file...")
         import docx
         file.seek(0)
-        doc = docx.Document(file)
-        return '\n'.join(para.text for para in doc.paragraphs)
+        doc = docx.Document(BytesIO(file.read()))
+        text = '\n'.join(para.text for para in doc.paragraphs)
+        title = os.path.splitext(os.path.basename(file_name if file_name else ''))[0]
+        return text, {"source": title}
 
-    def text_from_pptx(self, file):
+    async def text_from_pptx(self, file, file_name=None):
         """
         Extract text from a PPTX file.
         """
+        print("Processing PPTX file...")
         import pptx
         file.seek(0)
         ppt = pptx.Presentation(BytesIO(file.read()))
-        return '\n'.join(
+        text = '\n'.join(
             shape.text for slide in ppt.slides for shape in slide.shapes if hasattr(shape, "text")
         )
+        title = os.path.splitext(os.path.basename(file_name if file_name else ''))[0]
+        return text, {"source": title}
 
-    def text_from_rtf(self, file):
+    async def text_from_rtf(self, file, file_name=None):
         """
         Extract text from an RTF file.
         """
+        print("Processing RTF file...")
         file.seek(0)
-        return rtf_to_text(file.read().decode("utf-8"))
+        text = rtf_to_text(file.read().decode("utf-8"))
+        title = os.path.splitext(os.path.basename(file_name if file_name else ''))[0]
+        return text, {"source": title}
 
-    def text_from_txt(self, file):
+    async def text_from_txt(self, file, file_name=None):
         """
         Extract text from a TXT file.
         """
+        print("Processing TXT file...")
         file.seek(0)
-        return file.read().decode("utf-8")
+        text = file.read().decode("utf-8")
+        title = os.path.splitext(os.path.basename(file_name if file_name else ''))[0]
+        return text, {"source": title}
+
+    async def text_from_csv(self, file, file_name=None):
+        """
+        Extract text from a CSV file.
+        """
+        print("Processing CSV file...")
+        file.seek(0)
+        df = pd.read_csv(file)
+        df = df.fillna('')
+        company_name, sentiment = os.path.basename(file_name if file_name else '').rsplit('.', 1)[0].rsplit('_', 1)
+
+        # Ensure the preprocess function is available here
+        df['Processed_Text'] = df[sentiment].fillna("").astype(str).apply(preprocess)
+
+        # Extract the reviews
+        reviews = df['Processed_Text'].tolist()
+        original_reviews = df[sentiment].tolist()
+
+        # Use TF-IDF for vectorization
+        vectorizer = TfidfVectorizer(max_features=5000)
+        tfidf_matrix = vectorizer.fit_transform(reviews)
+
+        # Use OpenAI embeddings
+        openai_embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
+
+        # Compute OpenAI embeddings
+        openai_embed = openai_embeddings.embed_documents(reviews)
+        openai_embed = np.array(openai_embed)  # Ensure embeddings are a NumPy array
+
+        # Combine TF-IDF and OpenAI embeddings
+        combined_embeddings = np.hstack((tfidf_matrix.toarray(), openai_embed))
+
+        # Apply PCA for initial dimensionality reduction
+        pca = PCA(n_components=100)
+        pca_embeddings = pca.fit_transform(combined_embeddings)
+
+        # Apply UMAP for further dimensionality reduction with increased components
+        umap_model = UMAP(n_neighbors=50, n_components=20, min_dist=0.05, metric='cosine').fit(pca_embeddings)
+
+        # Use HDBSCAN as the clustering algorithm with adjusted parameters
+        hdbscan_model = hdbscan.HDBSCAN(min_cluster_size=5, min_samples=2, metric='euclidean', cluster_selection_epsilon=0.1, prediction_data=True)
+
+        # Create a BERTopic model with custom embeddings, UMAP, and HDBSCAN clustering
+        topic_model = BERTopic(embedding_model=openai_embeddings, umap_model=umap_model, hdbscan_model=hdbscan_model, min_topic_size=2, calculate_probabilities=True)
+
+        # Fit the model on the reviews
+        topics, probabilities = topic_model.fit_transform(reviews, pca_embeddings)
+
+        # Get topic info and representative documents
+        topic_info = topic_model.get_topic_info()
+
+        # Generate topic labels using the top 50 words for each topic
+        topic_labels_dict = {}
+        for topic in topic_info.Topic:
+            if topic == -1:
+                continue
+            words = topic_model.get_topic(topic)
+            if words:
+                label = " ".join([word[0] for word in words[:50]])  # Get the top 50 words
+                topic_labels_dict[topic] = label
+
+        # Add a default label for outliers
+        topic_labels_dict[-1] = "Outlier"
+
+        # Ensure the topic_info DataFrame has the correct labels
+        topic_info['Name'] = topic_info['Topic'].map(topic_labels_dict)
+
+        # Map topic labels to the main DataFrame
+        df['Topic'] = topics
+        df['Topic_Name'] = df['Topic'].map(topic_labels_dict)
+
+        # Create aggregated documents for each topic
+        topic_groups = df.groupby('Topic')[sentiment].apply(lambda x: '_'.join(x)).reset_index()
+
+        # Combine all texts for a single document
+        combined_text = "\n".join(df['Processed_Text'].tolist())
+        initial_metadata = {
+            "source": os.path.basename(file_name if file_name else ''),
+            "company name": company_name,
+            "sentiment": sentiment,
+            "topic": "",
+            "topic_name": "",
+            "categories": []
+        }
+
+        # Create Documents
+        documents = []
+        for i, row in topic_groups.iterrows():
+            topic_number = row['Topic']
+            doc = {
+                "page_content": row[sentiment],
+                "metadata": {
+                    "source": "user_reviews",
+                    "company name": company_name,
+                    "sentiment": sentiment,
+                    "topic": topic_number,
+                    "topic_name": topic_labels_dict.get(topic_number, f"Topic {topic_number}")
+                }
+            }
+            documents.append(Document(page_content=doc["page_content"], metadata=doc["metadata"]))
+
+        return combined_text, initial_metadata, documents
 
 def preprocess_text(text):
     """
@@ -163,39 +298,59 @@ def preprocess_text(text):
     return structured_data
 
 
-def load_and_process_document(file_path, loader):
+async def load_and_process_document(file_path, loader):
     """
     Load and split a document into chunks.
     """
     try:
-        with open(file_path, 'rb') as file:
-            document_instance = loader.load(file)
-            # Preprocess and structure the text
-            structured_text = preprocess_text(document_instance.page_content)
-            # Save the parsed text to a file
-            # Convert structured text back to Document objects
-            documents = [Document(page_content=slide.get('content', ''), metadata={"source": os.path.basename(file_path), "slide_number": slide.get('slide_number', '')}) for slide in structured_text]
+        file_extension = os.path.splitext(file_path)[-1].lower()
+        print(f"Loading file with extension: {file_extension}")
+        
+        async with aiofiles.open(file_path, 'rb') as file:
+            file_content = await file.read()
+            file_stream = BytesIO(file_content)
+
+            # Load the document, handle the case when CSV is loaded
+            if file_extension == '.csv':
+                document_instance, documents = await loader.load(file_stream, file_type=file_extension, file_name=file_path)
+                structured_data = documents
+            else:
+                document_instance = await loader.load(file_stream, file_type=file_extension, file_name=file_path)
+                structured_data = preprocess_text(document_instance.page_content)
+                documents = [Document(page_content=slide.get('content', ''), metadata={"source": os.path.basename(file_path), "slide_number": slide.get('slide_number', '')}) for slide in structured_data]
+
             chunks = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100).split_documents(documents)
             print(f"Document {file_path} loaded and split into {len(chunks)} chunks.")
+            for i, chunk in enumerate(chunks):
+                print(f"Chunk {i + 1}: Length = {len(chunk.page_content)} characters")
             return chunks
     except Exception as e:
         print(f"Error processing {file_path}: {str(e)}")
         return []
 
-def embed_documents_in_batches(documents, embedding_model, batch_size=10, use_sentence_transformer=False):
+async def embed_documents_in_batches(documents, embedding_model, batch_size=10, use_sentence_transformer=False):
     """
     Embed documents in batches for efficiency.
     """
     print("Embedding documents in batches...")
     batches = [documents[i:i + batch_size] for i in range(0, len(documents), batch_size)]
     embeddings = []
+    
+    loop = asyncio.get_event_loop()
     with ThreadPoolExecutor() as executor:
         if use_sentence_transformer:
-            futures = [executor.submit(embedding_model.encode, [doc.page_content for doc in batch], convert_to_tensor=True) for batch in batches]
+            futures = [loop.run_in_executor(executor, embedding_model.encode, [doc.page_content for doc in batch], True) for batch in batches]
         else:
-            futures = [executor.submit(embedding_model.embed_documents, [doc.page_content for doc in batch]) for batch in batches]
-        for future in as_completed(futures):
-            embeddings.extend(future.result().cpu().numpy() if use_sentence_transformer else future.result())
+            futures = [loop.run_in_executor(executor, embedding_model.embed_documents, [doc.page_content for doc in batch]) for batch in batches]
+        
+        results = await asyncio.gather(*futures)
+        
+        for result in results:
+            if use_sentence_transformer:
+                embeddings.extend(result.cpu().numpy())
+            else:
+                embeddings.extend(result)
+
     print(f"Completed embedding {len(documents)} documents.")
     return embeddings
 
@@ -221,10 +376,7 @@ def advanced_ner(content):
         entities[result['entity']].append(result['word'])
     return entities
 
-def enhance_metadata_with_bertopic_and_advanced_ner(doc):
-    """
-    Enhance document metadata with BERTopic and advanced NER.
-    """
+async def enhance_metadata_with_bertopic_and_advanced_ner(doc):
     content = doc.page_content
     topics = perform_bertopic_modeling([content])
     entities = advanced_ner(content)
@@ -254,6 +406,9 @@ def enhance_metadata_with_bertopic_and_advanced_ner(doc):
         except:
             language = "unknown"
 
+    except LangDetectException:
+        language = "unknown"
+    
     # Readability Metrics
     flesch = textstat.flesch_kincaid_grade(content)
     smog = textstat.smog_index(content)
@@ -266,79 +421,95 @@ def enhance_metadata_with_bertopic_and_advanced_ner(doc):
     # Document Length
     length = len(content.split())
 
-    # Update metadata
-    doc.metadata.update({
+    ## Preserve original metadata
+    original_metadata = {
+        "source": doc.metadata.get("source", ""),
+        "company name": doc.metadata.get("company name", ""),
+        "sentiment": doc.metadata.get("sentiment", ""),
+        "topic": doc.metadata.get("topic", ""),
+        "topic_name": doc.metadata.get("topic_name", ""),
+        "categories": doc.metadata.get("categories", [])
+    }
+
+    # Update metadata with new information, ensuring original metadata is preserved
+    enhanced_metadata = {
+        **doc.metadata,
         "entities": {key: ', '.join(map(str, val)) for key, val in entities.items()},
         "keywords": ', '.join([kw[0] for kw in keywords]),
         "rake_keywords": ', '.join([kw[1] for kw in rake_keywords]),
-        "topics": topics,
-        "sentiment": sentiment,
-        "vader_sentiment": vader_sentiment,
+        "topics": ', '.join(map(str, topics)),  # Ensure topics are joined into a string
+        "sentiment": str(sentiment),
+        "vader_sentiment": str(vader_sentiment),
         "language": language,
-        "readability_scores": {k: str(v) for k, v in readability_scores.items()},
+        "readability_scores_flesch_kincaid_grade": str(readability_scores["flesch_kincaid_grade"]),
+        "readability_scores_smog_index": str(readability_scores["smog_index"]),
+        "readability_scores_flesch_reading_ease": str(readability_scores["flesch_reading_ease"]),
         "document_length": str(length),
-    })
+    }
+    # Combine original and enhanced metadata, prioritizing original values if present
+    for key, value in original_metadata.items():
+        if key not in enhanced_metadata or enhanced_metadata[key] == '':
+            enhanced_metadata[key] = value
 
-    # Flatten metadata
-    doc.metadata = flatten_metadata(doc.metadata)
+    doc.metadata = flatten_metadata(enhanced_metadata)
+    print(doc.metadata)
 
     print(f"Metadata enhanced for document with source {doc.metadata['source']}")
     return doc
 
-# Initialize MongoDB
+# Initialize MongoDB connection inside an async function
 mongo_utils = MongoUtils()
-db = mongo_utils.connect_to_database()
-embeddings_collection = db.embeddings
+
+async def initialize_mongo():
+    db = await mongo_utils.connect_to_database()
+    return db.embeddings
 
 # Store Embeddings in MongoDB
-def store_embeddings(documents, embeddings):
+async def store_embeddings(documents, embeddings):
     for doc, emb in zip(documents, embeddings):
         # Ensure embedding is a list
         embedding_list = emb.tolist() if not isinstance(emb, list) else emb
         doc.metadata['embedding'] = embedding_list  # Store embedding in metadata
-        embeddings_collection.insert_one({
+        await embeddings_collection.insert_one({
             "content": doc.page_content,
             "metadata": doc.metadata,
         })
 
-
 # Retrieve Embeddings from MongoDB
-def retrieve_embeddings():
-    embeddings_data = list(embeddings_collection.find({}))
+async def retrieve_embeddings():
+    embeddings_data = await embeddings_collection.find({}).to_list(length=None)
     documents = [Document(page_content=data["content"], metadata=data["metadata"]) for data in embeddings_data]
     embeddings = [data["metadata"]["embedding"] for data in embeddings_data]
     return documents, embeddings
 
-def calculate_similarity(embedding1, embedding2, adjustment_factor=2):
-    """
-    Calculate similarity between two embeddings.
-    """
-    similarity = cosine_similarity([embedding1], [embedding2])[0][0]
-    adjusted_similarity = similarity ** adjustment_factor
-    return adjusted_similarity
-
-def process_documents(main_document_path, file_paths, save_path):
+async def process_documents(main_document_path, file_paths, save_path):
     start_time = time.time()
     all_chunks = []
     loader = CustomTextLoader()
     openai_embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
 
+    global embeddings_collection
+    embeddings_collection = await initialize_mongo()
+
     main_load_start = time.time()
-    with open(main_document_path, 'rb') as main_file:
-        main_doc_instance = loader.load(main_file)
+    async with aiofiles.open(main_document_path, 'rb') as main_file:
+        file_content = await main_file.read()
+        result = await loader.load(BytesIO(file_content), file_type=os.path.splitext(main_document_path)[-1].lower(), file_name=main_document_path)
+        if isinstance(result, tuple):
+            main_doc_instance, _ = result
+        else:
+            main_doc_instance = result
         main_doc_embedding = openai_embedding_model.embed_documents([main_doc_instance.page_content])[0]
+        print(f"Main document embedding length: {len(main_doc_embedding)}")
     print(f"Main document loaded and embedded in {time.time() - main_load_start} seconds")
 
     process_docs_start = time.time()
-    with ThreadPoolExecutor() as executor:
-        futures = []
-        for file_path in file_paths:
-            futures.append(executor.submit(load_and_process_document, file_path, loader))
+    tasks = [load_and_process_document(file_path, loader) for file_path in file_paths]
+    results = await asyncio.gather(*tasks)
 
-        for future in as_completed(futures):
-            chunks = future.result()
-            if chunks:
-                all_chunks.extend(chunks)
+    for chunks in results:
+        if chunks:
+            all_chunks.extend(chunks)
 
     print(f"Other documents processed in {time.time() - process_docs_start} seconds")
 
@@ -349,21 +520,22 @@ def process_documents(main_document_path, file_paths, save_path):
     print(f"Slack messages processed in {time.time() - process_docs_start} seconds")
 
     if all_chunks:
-        all_chunks = [enhance_metadata_with_bertopic_and_advanced_ner(chunk) for chunk in all_chunks if "slack_thread" not in chunk.metadata["source"]]
+        tasks = [enhance_metadata_with_bertopic_and_advanced_ner(chunk) for chunk in all_chunks if "slack_thread" not in chunk.metadata["source"]]
+        all_chunks = await asyncio.gather(*tasks)
 
         similarity_start = time.time()
-        chunk_embeddings = embed_documents_in_batches(all_chunks, openai_embedding_model, batch_size=10)
+        chunk_embeddings = await embed_documents_in_batches(all_chunks, openai_embedding_model, batch_size=10)
         similarity_scores = [calculate_similarity(main_doc_embedding, chunk_embedding) for chunk_embedding in chunk_embeddings]
-
+        
         slack_similarity_scores = [calculate_similarity(main_doc_embedding, embedding) for embedding in slack_re_embeddings]
-
+        
         all_similarities = similarity_scores + slack_similarity_scores
         all_documents = all_chunks + slack_documents
         doc_similarities = list(zip(all_documents, all_similarities))
         doc_similarities = sorted(doc_similarities, key=lambda x: x[1], reverse=True)
         print(f"Similarity calculations completed in {time.time() - similarity_start} seconds")
 
-        store_embeddings(all_documents, chunk_embeddings + slack_re_embeddings)
+        await store_embeddings(all_documents, chunk_embeddings + slack_re_embeddings)
         print(f"Embeddings stored in MongoDB")
 
         print(f"Process documents completed in {time.time() - start_time} seconds")
@@ -371,7 +543,6 @@ def process_documents(main_document_path, file_paths, save_path):
 
     print(f"Process documents completed in {time.time() - start_time} seconds")
     return None, None, None, all_chunks
-
 
 def fetch_messages(channel_id):
     messages = []
@@ -474,11 +645,19 @@ def fetch_and_process_slack_messages():
     threads = group_messages_into_threads(messages)
     enhanced_documents = process_threads_and_enhance_metadata(threads)
 
-    slack_embeddings = embed_documents_in_batches(enhanced_documents, sentence_model, batch_size=10, use_sentence_transformer=True)
-    slack_re_embeddings = embed_documents_in_batches(
-        [Document(page_content=str(embedding)) for embedding in slack_embeddings],
-        OpenAIEmbeddings(model="text-embedding-ada-002"),
-        batch_size=10
-    )
+    # slack_embeddings = embed_documents_in_batches(enhanced_documents, sentence_model, batch_size=10, use_sentence_transformer=True)
+    # slack_re_embeddings = embed_documents_in_batches(
+    #     [Document(page_content=str(embedding)) for embedding in slack_embeddings],
+    #     OpenAIEmbeddings(model="text-embedding-ada-002"),
+    #     batch_size=10
+    # )
 
-    return enhanced_documents, slack_re_embeddings
+    return enhanced_documents, enhanced_documents
+
+def calculate_similarity(embedding1, embedding2, adjustment_factor=2):
+    """
+    Calculate similarity between two embeddings.
+    """
+    similarity = cosine_similarity([embedding1], [embedding2])[0][0]
+    adjusted_similarity = similarity ** adjustment_factor
+    return adjusted_similarity

@@ -22,6 +22,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 from document_processing import retrieve_embeddings, calculate_similarity
 from sentence_transformers import SentenceTransformer
+from transformers import GPT2Tokenizer
+
+tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
 sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
 
@@ -200,6 +203,17 @@ def get_llm_responses(queries, conversation_history):
         # Combine the top adjusted documents into a single context for the LLM
         context = "\n\n".join([doc.page_content for doc in adjusted_docs])
 
+        print(f"Context length (characters): {len(context)}")
+
+        # Tokenize context using GPT-2 tokenizer
+        tokenized_context = tokenizer(context)
+        print(f"Context length (tokens): {len(tokenized_context['input_ids'])}")
+        
+        # Generate response using OpenAI with the new syntax
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        openai_client = OpenAI(api_key=openai_api_key)
+        
+        
         step_start_time = time.time()
         response_text = ""
         for chunk in openai_client.chat.completions.create(
@@ -219,6 +233,8 @@ def get_llm_responses(queries, conversation_history):
             response_text += chunk_content
         print(f"\nOpenAI completion created in {time.time() - step_start_time:.2f} seconds")
 
+
+        
         relevant_metadata = [doc.metadata for doc in adjusted_docs]
 
         step_start_time = time.time()

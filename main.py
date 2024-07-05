@@ -9,7 +9,7 @@ from document_processing import process_documents
 from qa_chain import get_llm_responses
 from langchain_community.embeddings import OpenAIEmbeddings  # Correct import
 from qa_chain import update_conversation_history
-
+import asyncio
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")

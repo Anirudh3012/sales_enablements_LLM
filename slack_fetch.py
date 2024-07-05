@@ -1,3 +1,4 @@
+from asyncio import tasks
 import datetime
 from datetime import timedelta
 from slack_sdk import WebClient
@@ -9,13 +10,18 @@ from sentence_transformers import SentenceTransformer
 sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
 
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
+if not SLACK_BOT_TOKEN:
+    raise ValueError("SLACK_BOT_TOKEN not found in environment variables")
+
+client = WebClient(token=SLACK_BOT_TOKEN)
+
 
 CHANNEL_IDS = ["C06HD8ADMC5"]  # Replace with actual channel IDs
 client = WebClient(token=SLACK_BOT_TOKEN)
 
 import asyncio
 
-def fetch_messages(channel_id):
+async def fetch_messages(channel_id):
     messages = []
     try:
         result = client.conversations_history(channel=channel_id)
@@ -24,6 +30,9 @@ def fetch_messages(channel_id):
             text = message.get('text', '')
             timestamp = datetime.fromtimestamp(float(message.get('ts', 0)))
             channel_info = client.conversations_info(channel=channel_id)
+
+            timestamp = datetime.datetime.fromtimestamp(float(message.get('ts', 0)))
+            channel_info = await client.conversations_info(channel=channel_id)
             channel_name = channel_info['channel']['name']
             user_info = client.users_info(user=user_id)
             user_name = user_info['user']['name']
@@ -91,6 +100,7 @@ def process_threads_and_enhance_metadata(threads):
     """
     enhanced_documents = []
 
+    tasks = []
     for thread in threads:
         combined_content = " ".join([msg["text"] for msg in thread])
         combined_metadata = {
@@ -108,7 +118,9 @@ def process_threads_and_enhance_metadata(threads):
 
     return enhanced_documents
 
-def fetch_and_process_slack_messages():
+
+# In the fetch_and_process_slack_messages function
+async def fetch_and_process_slack_messages():
     """
     Fetch Slack messages, group them into threads, and enhance metadata.
     """
