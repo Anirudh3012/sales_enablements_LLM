@@ -25,16 +25,16 @@ services:
 #    depends_on:
 #      - lavinmq
 
-#  slack-producer:
-#    build:
-#      context: ./slackgpt-producer
-#      dockerfile: Dockerfile
-#    environment:
-#      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
-#      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET}
-#      CLOUDAMQP_URL: ${CLOUDAMQP_URL}
-#      PORT: 3000
-#    ports:
-#      - "3000:3000"
+  slack-producer:
+    build:
+      context: ./slackgpt-producer
+      dockerfile: Dockerfile
+    environment:
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET}
+      CLOUDAMQP_URL: ${CLOUDAMQP_URL}
+      PORT: 3000
+    ports:
+      - "3000:3000"
 #    depends_on:
 #      - lavinmq
