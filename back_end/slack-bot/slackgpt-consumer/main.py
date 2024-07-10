@@ -4,6 +4,10 @@ from slack_bolt import App
 from dotenv import load_dotenv
 from fastapi import FastAPI
 import time
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # from qa_chain import get_llm_responses
 from broker import cloudamqp
@@ -39,7 +43,7 @@ def post_response_to_slack(slack_message, slack_channel, thread_ts):
     )
 
 
-def callback(ch, method, properties, body):
+async def callback(ch, method, properties, body):
     """Handle message from CloudAMQP and respond in Slack."""
     body = json.loads(body.decode('utf-8'))
     chatgpt_prompt = body.get("prompt")
@@ -51,7 +55,7 @@ def callback(ch, method, properties, body):
     queries = [chatgpt_prompt]
 
     start_time = time.time()
-    responses = get_llm_responses(queries, conversation_history)  # This should be an async function
+    responses = await get_llm_responses(queries, conversation_history)  # This should be an async function
     response_time = time.time() - start_time
 
     for i, response in enumerate(responses):
@@ -67,16 +71,16 @@ def callback(ch, method, properties, body):
         post_response_to_slack(message, slack_channel, thread_ts)
 
 
-def main():
+async def main():
     cloudamqp.consume_message(callback=callback)
     print('message consumed')
-    
+    logger.info('Message consumed')
 
-# Run the app with a FastAPI server
+    # Run the app with a FastAPI server
 @fastapi_app.on_event("startup")
-def startup_event():
+async def startup_event():
     """ Code to run during startup """
-    main()
+    await main()
 
 
 @fastapi_app.on_event("shutdown")
