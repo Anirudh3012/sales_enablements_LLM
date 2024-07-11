@@ -1,4 +1,3 @@
-import asyncio
 import os
 import time  # Ensure this import is included
 import tkinter as tk
@@ -10,7 +9,7 @@ from document_processing import process_documents
 from qa_chain import get_llm_responses
 from langchain_community.embeddings import OpenAIEmbeddings  # Correct import
 from qa_chain import update_conversation_history
-
+import asyncio
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -34,7 +33,7 @@ async def main():
     # # competitor_web_text = scrape_website_content(competitor_url)
     # # print("Fetching competitor reviews...")
     # # competitor_reviews = get_reviews(competitor_product_name, RAPIDAPI_KEY)
-    
+
     main_document_path = filedialog.askopenfilename(title="Select Main Document", filetypes=[("All files", "*.*")])
     if not main_document_path:
         print("No main document selected.")

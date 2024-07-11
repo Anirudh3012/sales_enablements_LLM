@@ -22,6 +22,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 from document_processing import retrieve_embeddings, calculate_similarity
 from sentence_transformers import SentenceTransformer
+from transformers import GPT2Tokenizer
+
+tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
 sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
 
@@ -154,25 +157,35 @@ def get_confidence_level(confidence_score):
 
 
 async def get_llm_responses(queries, conversation_history):
-    """
-    Retrieve responses from the LLM based on adjusted similarity scores.
-    """
     responses = []
     openai_embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
 
     seen_documents = set()
 
     for query in queries:
+        step_start_time = time.time()
         topic_shifted = detect_new_topic(conversation_history, query)
-        print(f"Topic shifted: {topic_shifted}")  # Print if topic has shifted
+        print(f"Topic shifted: {topic_shifted}, Time taken: {time.time() - step_start_time:.2f} seconds")
+
         if topic_shifted:
             conversation_history = []  # Reset conversation history if a new topic is detected
 
+        step_start_time = time.time()
         documents, embeddings = await retrieve_embeddings()
+        print(f"Document embeddings retrieved in {time.time() - step_start_time:.2f} seconds")
+
+        step_start_time = time.time()
         query_embedding = openai_embedding_model.embed_documents([query])[0]
-        print(f"Query embedding length: {len(query_embedding)}")
+        print(f"Query embedding created in {time.time() - step_start_time:.2f} seconds")
+
+        step_start_time = time.time()
         doc_similarities = [(Document(page_content=doc.page_content, metadata=doc.metadata), calculate_similarity(query_embedding, emb)) for doc, emb in zip(documents, embeddings)]
+        print(f"Document similarities calculated in {time.time() - step_start_time:.2f} seconds")
+
+        step_start_time = time.time()
         adjusted_similarities = adjust_similarity_scores(query, doc_similarities)
+        print(f"Similarity scores adjusted in {time.time() - step_start_time:.2f} seconds")
+
         top_n = 10
         adjusted_similarities = sorted(adjusted_similarities, key=lambda x: x[1], reverse=True)
 
@@ -189,37 +202,59 @@ async def get_llm_responses(queries, conversation_history):
 
         # Combine the top adjusted documents into a single context for the LLM
         context = "\n\n".join([doc.page_content for doc in adjusted_docs])
+
         print(f"Context length (characters): {len(context)}")
-        print(f"Context length (tokens): {len(openai_embedding_model.tokenizer.encode(context))}")
+
+        # Tokenize context using GPT-2 tokenizer
+        tokenized_context = tokenizer(context)
+        print(f"Context length (tokens): {len(tokenized_context['input_ids'])}")
         
         # Generate response using OpenAI with the new syntax
-        completion = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        openai_client = OpenAI(api_key=openai_api_key)
+
+
+        step_start_time = time.time()
+        response_text = ""
+        for chunk in openai_client.chat.completions.create(
+            model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "system", "content": "You are a seasoned sales representative and the questions being asked are questions by junior reps who have questions about your own company and competitors. The answers need to be detailed with specificity and not give any generic answers and should be answers that junior reps can directly tell potential prospects during a discovery call."},
                 {"role": "user", "content": context + "\n\n" + query}
             ],
             max_tokens=1024,
             n=1,
             stop=None,
-            temperature=0.2
-        )
-        
-        # Access the generated text from the response
-        response_text = completion.choices[0].message['content'].strip()
+            temperature=0.1,
+            stream=True
+        ):
+            chunk_content = chunk.choices[0].delta.content if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content else ""
+            print(chunk_content, end="", flush=True)
+            response_text += chunk_content
+        print(f"\nOpenAI completion created in {time.time() - step_start_time:.2f} seconds")
+
+
         
         relevant_metadata = [doc.metadata for doc in adjusted_docs]
 
-        # Calculate relevance and hallucination detection
+        step_start_time = time.time()
         query_relevance_scores = calculate_query_relevance(query_embedding, [doc.metadata["embedding"] for doc in adjusted_docs])
+        print(f"Query relevance scores calculated in {time.time() - step_start_time:.2f} seconds")
+
+        step_start_time = time.time()
         chunk_relevance_scores = calculate_chunk_relevance(query, adjusted_docs)
+        print(f"Chunk relevance scores calculated in {time.time() - step_start_time:.2f} seconds")
+
+        step_start_time = time.time()
         hallucination_detected, checks = detect_hallucination(response_text, adjusted_docs)
-        
-        # Calculate confidence score
+        print(f"Hallucination detection completed in {time.time() - step_start_time:.2f} seconds")
+
+        step_start_time = time.time()
         confidence_score = (sum(query_relevance_scores) + sum(chunk_relevance_scores)) * 100 / (len(query_relevance_scores) + len(chunk_relevance_scores))
         if hallucination_detected:
             confidence_score *= 0.5  # Penalize for hallucination
         confidence_level = get_confidence_level(confidence_score)
+        print(f"Confidence score calculated in {time.time() - step_start_time:.2f} seconds")
 
         responses.append({
             "result": response_text,
