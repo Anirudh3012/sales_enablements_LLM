@@ -23,7 +23,7 @@ from langdetect import detect
 import textstat
 from bertopic import BERTopic
 from rake_nltk import Rake
-from back_end.Utils.mongo_utils import MongoUtils
+from mongo_utils import MongoUtils
 from transformers import pipeline
 import time  # Ensure this is imported
 import asyncio
