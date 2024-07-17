@@ -54,6 +54,7 @@ rake = Rake()
 from langdetect.lang_detect_exception import LangDetectException
 
 
+
 class CustomTextLoader:
     """
     Custom loader for various document types.
@@ -496,6 +497,8 @@ async def store_embeddings(documents, embeddings):
 
 # Retrieve Embeddings from MongoDB
 async def retrieve_embeddings():
+    global embeddings_collection
+    embeddings_collection = await initialize_mongo()
     embeddings_data = await embeddings_collection.find({}).to_list(length=None)
     documents = [Document(page_content=data["content"], metadata=data["metadata"]) for data in embeddings_data]
     embeddings = [data["metadata"]["embedding"] for data in embeddings_data]

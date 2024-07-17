@@ -1,11 +1,12 @@
 import os
 import json
-from slack_bolt import App
+import asyncio
+import logging
+from slack_bolt.async_app import AsyncApp
+from slack_sdk.web.async_client import AsyncWebClient
 from dotenv import load_dotenv
 from fastapi import FastAPI
-import asyncio
 import aio_pika
-import logging
 from qa_chain import update_conversation_history, get_llm_responses
 
 # Configure logging
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Initialize the Slack app with your bot token
-app = App(
+app = AsyncApp(
     token=os.environ.get("SLACK_BOT_TOKEN"),
     signing_secret=os.environ.get("SLACK_SIGNING_SECRET")
 )
@@ -24,18 +25,23 @@ app = App(
 # Initialize FastAPI app
 fastapi_app = FastAPI()
 
+# Initialize Slack async client
+slack_client = AsyncWebClient(token=os.environ.get("SLACK_BOT_TOKEN"))
 
 async def post_response_to_slack(slack_message, slack_channel, thread_ts):
     """
     Asynchronously posts a response to Slack.
     """
     message = f"\n{slack_message}\n"
-    await app.client.chat_postMessage(
-        channel=slack_channel,
-        text=message,
-        thread_ts=thread_ts
-    )
-
+    try:
+        await slack_client.chat_postMessage(
+            channel=slack_channel,
+            text=message,
+            thread_ts=thread_ts
+        )
+        logger.info("Message posted to Slack successfully.")
+    except Exception as e:
+        logger.error(f"Failed to post message to Slack: {e}")
 
 async def on_message(message: aio_pika.IncomingMessage):
     """
@@ -52,8 +58,8 @@ async def on_message(message: aio_pika.IncomingMessage):
         responses = await get_llm_responses([chatgpt_prompt], conversation_history)
 
         for response in responses:
-            message = f"Response: {response['result']} | Confidence: {response['confidence_score']:.2f} ({response['confidence_level']})"
-            await post_response_to_slack(message, slack_channel, thread_ts)
+            message_text = f"Response: {response['result']} | Confidence: {response['confidence_score']:.2f} ({response['confidence_level']})"
+            await post_response_to_slack(message_text, slack_channel, thread_ts)
 
 
 async def consume_messages():
@@ -64,7 +70,7 @@ async def consume_messages():
     channel = await connection.channel()  # Ensure the channel is opened
     queue = await channel.declare_queue('slack_bot_queue')
     await queue.consume(on_message, no_ack=False)
-
+    logger.info("Started consuming messages.")
 
 @fastapi_app.on_event("startup")
 async def startup_event():
@@ -72,8 +78,8 @@ async def startup_event():
     Starts up the consumer on application startup.
     """
     logger.info("Starting message consumer...")
-    asyncio.create_task(consume_messages())
-
+    task = asyncio.create_task(consume_messages())
+    await task
 
 @fastapi_app.on_event("shutdown")
 async def shutdown_event():
