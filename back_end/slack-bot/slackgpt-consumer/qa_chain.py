@@ -1,7 +1,7 @@
 import os
 import pickle  # For saving and loading embeddings
 from io import BytesIO
-import fitz  # PyMuPDF for PDFs
+# import fitz  # PyMuPDF for PDFs
 from striprtf.striprtf import rtf_to_text
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
@@ -213,13 +213,82 @@ async def get_llm_responses(queries, conversation_history):
 
         # Combine the top adjusted documents into a single context for the LLM
         context = """\n
-        GIVE THE FORMAT IN rich_text for for slack application.
-        You are a seasoned business analyst working for a company and the context being provided are reviews about your company data and your competitors. 
-        The answer needs to be specific and to the point with no generic answer. The answer should not be more than 200 words. The answer needs to be in the format :
-        Main heading
-        Sub Heading
-        Summary
-        Review excerpts
+        You are a seasoned business analyst working for a company. The context provided includes reviews about your company data and your competitors. Your responses should be insightful, specific, and to the point, with no generic answers. Each response should not exceed 200 words. 
+
+Ensure that the output is formatted in rich_text for Slack using Block Kit as follows:
+{
+	"blocks": [
+		{
+			"type": "header",
+			"text": {
+				"type": "plain_text",
+				"text": "Main Heading :star:",
+				"emoji": true
+			}
+		},
+		{
+			"type": "divider"
+		},
+		{
+			"type": "section",
+			"text": {
+				"type": "mrkdwn",
+				"text": "*Sub Heading 1*\n\n*Summary:* _Specific analysis for the first aspect here._"
+			}
+		},
+		{
+			"type": "divider"
+		},
+		{
+			"type": "section",
+			"text": {
+				"type": "mrkdwn",
+				"text": "*Sub Heading 2*\n\n*Summary:* _Specific analysis for the second aspect here._"
+			}
+		},
+		{
+			"type": "divider"
+		},
+		{
+			"type": "section",
+			"text": {
+				"type": "mrkdwn",
+				"text": "*Sub Heading 3*\n\n*Summary:* _Specific analysis for the third aspect here._"
+			}
+		},
+		{
+			"type": "divider"
+		},
+		{
+			"type": "section",
+			"text": {
+				"type": "mrkdwn",
+				"text": "*Review Excerpts:*"
+			}
+		},
+		{
+			"type": "section",
+			"text": {
+				"type": "mrkdwn",
+				"text": "> :small_blue_diamond: \"First review excerpt goes here.\""
+			}
+		},
+		{
+			"type": "section",
+			"text": {
+				"type": "mrkdwn",
+				"text": "> :small_blue_diamond: \"Second review excerpt goes here.\""
+			}
+		},
+		{
+			"type": "section",
+			"text": {
+				"type": "mrkdwn",
+				"text": "> :small_blue_diamond: \"Third review excerpt goes here.\""
+			}
+		}
+	]
+}
         \n""".join([doc.page_content for doc in adjusted_docs])
 
         print(f"Context length (characters): {len(context)}")
