@@ -196,7 +196,7 @@ async def get_llm_responses(queries, conversation_history):
         adjusted_similarities = adjust_similarity_scores(query, doc_similarities)
         print(f"Similarity scores adjusted in {time.time() - step_start_time:.2f} seconds")
 
-        top_n = 10
+        top_n = 50
         adjusted_similarities = sorted(adjusted_similarities, key=lambda x: x[1], reverse=True)
 
         adjusted_docs = []
@@ -213,6 +213,7 @@ async def get_llm_responses(queries, conversation_history):
 
         # Combine the top adjusted documents into a single context for the LLM
         context = """\n
+        GIVE THE FORMAT IN rich_text for for slack application.
         You are a seasoned business analyst working for a company and the context being provided are reviews about your company data and your competitors. 
         The answer needs to be specific and to the point with no generic answer. The answer should not be more than 200 words. The answer needs to be in the format :
         Main heading
