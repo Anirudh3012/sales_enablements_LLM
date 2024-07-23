@@ -212,32 +212,39 @@ async def get_llm_responses(queries, conversation_history):
                     break
 
         # Combine the top adjusted documents into a single context for the LLM
-        context = "\n\n".join([doc.page_content for doc in adjusted_docs])
+        context = """\n
+        You are a seasoned business analyst working for a company and the context being provided are reviews about your company data and your competitors. 
+        The answer needs to be specific and to the point with no generic answer. The answer should not be more than 200 words. The answer needs to be in the format :
+        Main heading
+        Sub Heading
+        Summary
+        Review excerpts
+        \n""".join([doc.page_content for doc in adjusted_docs])
 
         print(f"Context length (characters): {len(context)}")
 
         # Tokenize context using GPT-2 tokenizer
         tokenized_context = tokenizer(context)
         print(f"Context length (tokens): {len(tokenized_context['input_ids'])}")
-
+        
         # Generate response using OpenAI with the new syntax
         openai_api_key = os.getenv("OPENAI_API_KEY")
         openai_client = OpenAI(api_key=openai_api_key)
 
+
         step_start_time = time.time()
         response_text = ""
         for chunk in openai_client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system",
-                     "content": "You are a seasoned sales representative and the questions being asked are questions by junior reps who have questions about your own company and competitors. The answers need to be detailed with specificity and not give any generic answers and should be answers that junior reps can directly tell potential prospects during a discovery call."},
-                    {"role": "user", "content": context + "\n\n" + query}
-                ],
-                max_tokens=1024,
-                n=1,
-                stop=None,
-                temperature=0.1,
-                stream=True
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a seasoned business analyst and the questions being asked are questions by junior reps who have questions about your own company and competitors. The answers need to be detailed with specificity and not give any generic answers."},
+                {"role": "user", "content": context + "\n\n" + query}
+            ],
+            max_tokens=1024,
+            n=1,
+            stop=None,
+            temperature=0.1,
+            stream=True
         ):
             chunk_content = chunk.choices[0].delta.content if hasattr(chunk.choices[0].delta, 'content') and \
                                                               chunk.choices[0].delta.content else ""

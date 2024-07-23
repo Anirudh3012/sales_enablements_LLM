@@ -68,13 +68,13 @@ async def main():
             confidence_score = response["confidence_score"]
             confidence_level = response["confidence_level"]
 
-            print(f"Response {i+1}:")
-            print(card_text)
-            print(f"Confidence Score: {confidence_score:.2f} ({confidence_level})")
-            print("Relevant Content:")
-            for content in relevant_contents:
-                print(content)
-                print("="*50)
+            # print(f"Response {i+1}:")
+            # print(card_text)
+            # print(f"Confidence Score: {confidence_score:.2f} ({confidence_level})")
+            # print("Relevant Content:")
+            # for content in relevant_contents:
+            #     print(content)
+            #     print("="*50)
 
             conversation_history = update_conversation_history(conversation_history, card_text)
 

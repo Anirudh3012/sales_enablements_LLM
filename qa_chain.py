@@ -186,7 +186,7 @@ async def get_llm_responses(queries, conversation_history):
         adjusted_similarities = adjust_similarity_scores(query, doc_similarities)
         print(f"Similarity scores adjusted in {time.time() - step_start_time:.2f} seconds")
 
-        top_n = 10
+        top_n = 70
         adjusted_similarities = sorted(adjusted_similarities, key=lambda x: x[1], reverse=True)
 
         adjusted_docs = []
@@ -201,7 +201,14 @@ async def get_llm_responses(queries, conversation_history):
                     break
 
         # Combine the top adjusted documents into a single context for the LLM
-        context = "\n\n".join([doc.page_content for doc in adjusted_docs])
+        context = """\n
+        You are a seasoned business analyst working for a company and the context being provided are reviews about your company data and your competitors. 
+        The answer needs to be specific and to the point with no generic answer. The answer needs to be in the format :
+        Main heading
+        Sub Heading
+        Summary
+        Review excerpts
+        \n""".join([doc.page_content for doc in adjusted_docs])
 
         print(f"Context length (characters): {len(context)}")
 
@@ -219,7 +226,7 @@ async def get_llm_responses(queries, conversation_history):
         for chunk in openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a seasoned sales representative and the questions being asked are questions by junior reps who have questions about your own company and competitors. The answers need to be detailed with specificity and not give any generic answers and should be answers that junior reps can directly tell potential prospects during a discovery call."},
+                {"role": "system", "content": "You are a seasoned sales representative and the questions being asked are questions by junior reps who have questions about your own company and competitors. The answers need to be detailed with specificity and not give any generic answers."},
                 {"role": "user", "content": context + "\n\n" + query}
             ],
             max_tokens=1024,
