@@ -214,11 +214,10 @@ async def get_llm_responses(queries, conversation_history):
         # Combine the top adjusted documents into a single context for the LLM
         context = """\n
         You are a seasoned business analyst working for a company. The context provided includes reviews about your company data and your competitors. Your responses should be insightful, specific, and to the point, with no generic answers. Each response should not exceed 200 words. 
-
-Ensure that the output is formatted in rich_text for Slack using Block Kit as follows:
-{
-	"blocks": [
-		{
+        Ensure that the output is formatted in rich_text for Slack using Block Kit as follows:
+        {
+        "blocks": [
+        {
 			"type": "header",
 			"text": {
 				"type": "plain_text",
