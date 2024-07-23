@@ -58,7 +58,7 @@ async def on_message(message: aio_pika.IncomingMessage):
         responses = await get_llm_responses([chatgpt_prompt], conversation_history)
 
         for response in responses:
-            message_text = f"Response: {response['result']} | Confidence: {response['confidence_score']:.2f} ({response['confidence_level']})"
+            message_text = f"{response['result']}"
             await post_response_to_slack(message_text, slack_channel, thread_ts)
 
 
