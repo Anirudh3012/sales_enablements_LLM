@@ -212,83 +212,101 @@ async def get_llm_responses(queries, conversation_history):
                     break
 
         # Combine the top adjusted documents into a single context for the LLM
-        context = """\n
-        You are a seasoned business analyst working for a company. The context provided includes reviews about your company data and your competitors. Your responses should be insightful, specific, and to the point, with no generic answers. Each response should not exceed 200 words. 
-        Ensure that the output is formatted in rich_text for Slack using Block Kit as follows:
+        context = """
+        You are a seasoned business analyst working for a company. The context provided includes reviews about your company data and your competitors. Your responses should be insightful, specific, and to the point, with no generic answers. Each response should not exceed 200 words.
+
+        Ensure that the output is formatted in rich_text for Slack using Block Kit as follows and every line break has "\\n". replace the "sub heading" with generated sub headings:
         {
-        "blocks": [
-        {
-			"type": "header",
-			"text": {
-				"type": "plain_text",
-				"text": "Main Heading :star:",
-				"emoji": true
-			}
-		},
-		{
-			"type": "divider"
-		},
-		{
-			"type": "section",
-			"text": {
-				"type": "mrkdwn",
-				"text": "*Sub Heading 1*\n\n*Summary:* _Specific analysis for the first aspect here._"
-			}
-		},
-		{
-			"type": "divider"
-		},
-		{
-			"type": "section",
-			"text": {
-				"type": "mrkdwn",
-				"text": "*Sub Heading 2*\n\n*Summary:* _Specific analysis for the second aspect here._"
-			}
-		},
-		{
-			"type": "divider"
-		},
-		{
-			"type": "section",
-			"text": {
-				"type": "mrkdwn",
-				"text": "*Sub Heading 3*\n\n*Summary:* _Specific analysis for the third aspect here._"
-			}
-		},
-		{
-			"type": "divider"
-		},
-		{
-			"type": "section",
-			"text": {
-				"type": "mrkdwn",
-				"text": "*Review Excerpts:*"
-			}
-		},
-		{
-			"type": "section",
-			"text": {
-				"type": "mrkdwn",
-				"text": "> :small_blue_diamond: \"First review excerpt goes here.\""
-			}
-		},
-		{
-			"type": "section",
-			"text": {
-				"type": "mrkdwn",
-				"text": "> :small_blue_diamond: \"Second review excerpt goes here.\""
-			}
-		},
-		{
-			"type": "section",
-			"text": {
-				"type": "mrkdwn",
-				"text": "> :small_blue_diamond: \"Third review excerpt goes here.\""
-			}
-		}
-	]
-}
-        \n""".join([doc.page_content for doc in adjusted_docs])
+            "blocks": [
+                {
+                    "type": "header",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "Main Heading :star:",
+                        "emoji": true
+                    }
+                },
+                {
+                    "type": "divider"
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "*Sub Heading 1*\\n\\n _Specific analysis for the first aspect here._"
+                    }
+                },
+                {
+                    "type": "divider"
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "*Sub Heading 2*\\n\\n _Specific analysis for the second aspect here._"
+                    }
+                },
+                {
+                    "type": "divider"
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "*Sub Heading 3*\\n\\n _Specific analysis for the third aspect here._"
+                    }
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "*Sub Heading 4*\\n\\n _Specific analysis for the fourth aspect here._"
+                    }
+                },
+                {
+                    "type": "divider"
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "*Sub Heading 5*\\n\\n _Specific analysis for the fifth aspect here._"
+                    }
+                },
+                {
+                    "type": "divider"
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "*Review Excerpts:*"
+                    }
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "> :small_blue_diamond: \\"First review excerpt goes here.\\""
+                    }
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "> :small_blue_diamond: \\"Second review excerpt goes here.\\""
+                    }
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "> :small_blue_diamond: \\"Third review excerpt goes here.\\""
+                    }
+                }
+            ]
+        }
+        """+ "\n".join([doc.page_content for doc in adjusted_docs])
 
         print(f"Context length (characters): {len(context)}")
 
@@ -319,6 +337,7 @@ async def get_llm_responses(queries, conversation_history):
                                                               chunk.choices[0].delta.content else ""
             print(chunk_content, end="", flush=True)
             response_text += chunk_content
+        response_text = response_text.replace("```json", "").replace("```", "")
         print(f"\nOpenAI completion created in {time.time() - step_start_time:.2f} seconds")
 
         relevant_metadata = [doc.metadata for doc in adjusted_docs]
