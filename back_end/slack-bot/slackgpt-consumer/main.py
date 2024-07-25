@@ -30,13 +30,13 @@ slack_client = AsyncWebClient(token=os.environ.get("SLACK_BOT_TOKEN"))
 
 async def post_response_to_slack(slack_message, slack_channel, thread_ts):
     """
-    Asynchronously posts a response to Slack.
+    Asynchronously posts a response to Slack using Block Kit formatting.
     """
-    message = f"\n{slack_message}\n"
     try:
+        logger.info("Posting message to Slack: %s", json.dumps(slack_message, indent=2))
         await slack_client.chat_postMessage(
             channel=slack_channel,
-            text=message,
+            blocks=slack_message['blocks'],
             thread_ts=thread_ts
         )
         logger.info("Message posted to Slack successfully.")
@@ -58,9 +58,12 @@ async def on_message(message: aio_pika.IncomingMessage):
         responses = await get_llm_responses([chatgpt_prompt], conversation_history)
 
         for response in responses:
-            message_text = f"{response['result']}"
-            await post_response_to_slack(message_text, slack_channel, thread_ts)
-
+            message_text = response['result']
+            try:
+                slack_message = json.loads(message_text)  # Ensure response is a valid JSON
+                await post_response_to_slack(slack_message, slack_channel, thread_ts)
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to decode JSON: {e}")
 
 async def consume_messages():
     """
